@@ -21,26 +21,37 @@ var (
 	remotehost []string
 )
 
-func enviar(per Persona, nodo int) {
+//envío de datos
+func enviar(per Persona, nodo int) { //Envía la clase persona encriptada
 	conn, _ := net.Dial("tcp", remotehost[nodo])
 	defer conn.Close()
 
+	//encriptar datos
 	jsonBytes, _ := json.Marshal(per)
 
 	fmt.Fprintf(conn, "%s\n", string(jsonBytes))
 }
+func enviarRango(a, b, nodo int) { //envía el rango que tomará cada nodo
+	conn, _ := net.Dial("tcp", remotehost[nodo])
+	defer conn.Close()
+	fmt.Fprintf(conn, "%d\n", a)
+	fmt.Fprintf(conn, "%d\n", b)
+}
 
+//captura de datos
 func manejador(con net.Conn, ch chan Persona) {
 
 	defer con.Close()
 	r := bufio.NewReader(con)
 	jsonString, _ := r.ReadString('\n')
+	//desencriptado de datos
 	var persona Persona
 	json.Unmarshal([]byte(jsonString), &persona)
 	ch <- persona
 
 }
 
+//calculo del error promedio de los nodos
 func calcularError(ch chan float64) {
 	var err float64 = 0
 	for i := 0; i < n; i++ {
@@ -51,6 +62,7 @@ func calcularError(ch chan float64) {
 	fmt.Printf("El error cuadrático medio obtenido por el algoritmo es de ±%.2fkg\n", err)
 }
 
+//recibe el error obtenido en cada nodo (Se utiliza RMSE)
 func recibirError(con net.Conn, ch chan float64) {
 	defer con.Close()
 	r := bufio.NewReader(con)
@@ -61,6 +73,7 @@ func recibirError(con net.Conn, ch chan float64) {
 	ch <- err
 }
 
+//Calcula el resultado promedio de los nodos
 func procesarResultado(ch chan Persona) {
 	var resultados []Persona
 	for i := 0; i < n; i++ {
@@ -75,13 +88,7 @@ func procesarResultado(ch chan Persona) {
 	fmt.Printf("El peso estimado para una persona de %.2fm de estatura es de %.2fkg\n", resultados[0].Height/100, promedio)
 }
 
-func enviarRango(a, b, nodo int) {
-	conn, _ := net.Dial("tcp", remotehost[nodo])
-	defer conn.Close()
-	fmt.Fprintf(conn, "%d\n", a)
-	fmt.Fprintf(conn, "%d\n", b)
-}
-
+//Calcula el intervalo de datos con el que entrenará cada nodo
 func dividirTrabajo(ldataset int) {
 	a := int(ldataset / n)
 	for i := 0; i < n; i++ {
@@ -95,6 +102,7 @@ func dividirTrabajo(ldataset int) {
 }
 
 func main() {
+	//lectura del dataset para obtener el tamaño
 	chPersona := make(chan Persona, n)
 	chError := make(chan float64, n)
 	csvFile, err := os.Open("Datasets/weights_heights.csv")
@@ -109,7 +117,8 @@ func main() {
 
 	rIng1 := bufio.NewReader(os.Stdin)
 
-	fmt.Print("Ingrese el puerto de escucha:")
+	//lectura de puertos
+	fmt.Print("Ingrese el puerto receptor:")
 	port, _ := rIng1.ReadString('\n')
 	port = strings.TrimSpace(port)
 	hostname := fmt.Sprintf("localhost:%s", port)
@@ -134,7 +143,9 @@ func main() {
 		con, _ := ln.Accept()
 		go recibirError(con, chError)
 	}
+
 	calcularError(chError)
+
 	for {
 		fmt.Print("Ingrese la estatura a estimar (en cm): ")
 		_dato, _ := rIng1.ReadString('\n')

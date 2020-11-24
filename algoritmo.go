@@ -32,36 +32,35 @@ var (
 
 	rmse float64 //Error cuadrático medio
 
-	wg1   sync.WaitGroup
-	wg2   sync.WaitGroup
-	wg3   sync.WaitGroup
+	wg1 sync.WaitGroup
+	wg2 sync.WaitGroup
+	wg3 sync.WaitGroup
+
+	//rango del dataset que va a tomar
 	left  int
 	rigth int
 )
 
-const (
-	cols = 2
-)
-
 type Persona struct {
-	Height float64 `json:"height"`
-	Weight float64 `json:"weight"`
+	Height float64 `json:"height"` //estatura
+	Weight float64 `json:"weight"` //peso
 }
 
 func leerDatos() {
+	//abrir csv
 	csvFile, err := os.Open("Datasets/weights_heights.csv")
 	if err != nil {
 		fmt.Println(err)
 	}
 	fmt.Println("Successfully Opened CSV file")
 	defer csvFile.Close()
-
+	//recuperar informacion del dataset
 	csvLines, err := csv.NewReader(csvFile).ReadAll()
 	if err != nil {
 		fmt.Println(err)
 	}
+	//procesar dataset
 	for i, line := range csvLines {
-
 		if i >= left && i < rigth {
 
 			weitht, _ := strconv.ParseFloat(line[1], 64)
@@ -70,10 +69,8 @@ func leerDatos() {
 				Height: height,
 				Weight: weitht,
 			}
-
 			data = append(data, per)
 		}
-
 		//fmt.Println(height, weitht)
 	}
 
@@ -175,9 +172,11 @@ func calcularRMSE() {
 //////////////////////////////////
 var remotehost string
 
+//envio de datos
 func enviar(per Persona) {
 	conn, _ := net.Dial("tcp", remotehost)
 	defer conn.Close()
+	//encriptar datos
 	jsonBytes, _ := json.Marshal(per)
 	fmt.Fprintf(conn, "%s\n", string(jsonBytes))
 }
@@ -186,19 +185,38 @@ func enviarError() {
 	defer conn.Close()
 	fmt.Fprintf(conn, "%.2f\n", rmse)
 }
+
+//recepción de datos
 func manejador(con net.Conn) {
 	defer con.Close()
 	r := bufio.NewReader(con)
 
 	jsonString, _ := r.ReadString('\n')
+
+	//desencriptar mensaje
 	var persona Persona
 	json.Unmarshal([]byte(jsonString), &persona)
+
+	//estimar peso con la altura ingresada
 	persona.Weight = prediction(float64(persona.Height))
 
+	//mostrar y enviar
 	mostrar, _ := json.Marshal(persona)
 	fmt.Println("Llegó y se procesó correctamente", string(mostrar))
 	enviar(persona)
 }
+func setRango(con net.Conn) { //setea el rango deld dataset con el cual se va a entrenar
+	defer con.Close()
+	r := bufio.NewReader(con)
+	str, _ := r.ReadString('\n')
+	left, _ = strconv.Atoi(strings.TrimSpace(str))
+	str, _ = r.ReadString('\n')
+	rigth, _ = strconv.Atoi(strings.TrimSpace(str))
+	fmt.Println(left, rigth)
+	wg3.Done()
+}
+
+//ejecución del algoritmo
 func ejecutarAlgoritmo() {
 	leerDatos()
 
@@ -219,25 +237,16 @@ func ejecutarAlgoritmo() {
 	go calcularRMSE()
 
 }
-func setRango(con net.Conn) {
-	defer con.Close()
-	r := bufio.NewReader(con)
-	str, _ := r.ReadString('\n')
-	left, _ = strconv.Atoi(strings.TrimSpace(str))
-	str, _ = r.ReadString('\n')
-	rigth, _ = strconv.Atoi(strings.TrimSpace(str))
-	fmt.Println(left, rigth)
-	wg3.Done()
-}
-func main() {
 
+func main() {
+	//entrada de puerto
 	rIng1 := bufio.NewReader(os.Stdin)
-	fmt.Print("Ingrese el puerto de escucha:")
+	fmt.Print("Ingrese el puerto de recepción:")
 	port, _ := rIng1.ReadString('\n')
 	port = strings.TrimSpace(port)
 	hostname := fmt.Sprintf("localhost:%s", port)
 
-	fmt.Print("Ingrese el puerto remoto: ")
+	fmt.Print("Ingrese el puerto MASTER: ")
 	port, _ = rIng1.ReadString('\n')
 	port = strings.TrimSpace(port)
 	remotehost = fmt.Sprintf("localhost:%s", port)
