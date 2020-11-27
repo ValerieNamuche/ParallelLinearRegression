@@ -31,6 +31,7 @@ func enviar(per Persona, nodo int) { //Envía la clase persona encriptada
 
 	fmt.Fprintf(conn, "%s\n", string(jsonBytes))
 }
+
 func enviarRango(a, b, nodo int) { //envía el rango que tomará cada nodo
 	conn, _ := net.Dial("tcp", remotehost[nodo])
 	defer conn.Close()

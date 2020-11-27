@@ -41,11 +41,7 @@ var (
 	rigth int
 )
 
-type Persona struct {
-	Height float64 `json:"height"` //estatura
-	Weight float64 `json:"weight"` //peso
-}
-
+////////////////////////Algoritmo De regresion Lineal
 func leerDatos() {
 	//abrir csv
 	csvFile, err := os.Open("Datasets/weights_heights.csv")
@@ -76,8 +72,23 @@ func leerDatos() {
 
 }
 
-//Calculo del SXX
-func calcularSXX() {
+//Cálculo del promedio
+func average() {
+	var ans1 float64 = 0
+	var ans2 float64 = 0
+	for i, v := range data {
+		if i >= 0 && i < len(data) {
+			ans1 += float64(v.Height)
+			ans2 += v.Weight
+		}
+	}
+	mx = ans1 / float64(len(data))
+	my = ans2 / float64(len(data))
+	//fmt.Println(*m)
+}
+
+//Calculo del SSXX
+func calcularSSXX() {
 	chi := make(chan int, len(data))
 	cho := make(chan float64, len(data))
 	var wg sync.WaitGroup
@@ -100,8 +111,8 @@ func calcularSXX() {
 	//fmt.Println(*S)
 }
 
-//Calculo del SXY
-func calcularSXY() {
+//Calculo del SSXY
+func calcularSSXY() {
 	chi := make(chan int, len(data))
 	cho := make(chan float64, len(data))
 	var wg sync.WaitGroup
@@ -122,20 +133,10 @@ func calcularSXY() {
 	//fmt.Println(*S)
 }
 
-//Cálculo del promedio
-func average() {
-	var ans1 float64 = 0
-	var ans2 float64 = 0
-	for i, v := range data {
-		if i >= 0 && i < len(data) {
-			ans1 += float64(v.Height)
-			ans2 += v.Weight
-		}
-	}
-	mx = ans1 / float64(len(data))
-	my = ans2 / float64(len(data))
-
-	//fmt.Println(*m)
+//Calculo de la pendiente y el punto de itntersección de la línea de regresión
+func calculoB1B2() {
+	b1 = sxy / sxx
+	b0 = my - b1*mx
 }
 
 //h(xi)=b0*b1*xi (Calculo del valor previsto)
@@ -155,7 +156,6 @@ func calcularRMSE() {
 		chi <- i
 		go func() {
 			p := <-chi
-
 			cho <- ((data[p].Weight) - (prediction(data[p].Height))) * ((data[p].Weight) - (prediction(data[p].Height)))
 			wg.Done()
 		}()
@@ -170,6 +170,12 @@ func calcularRMSE() {
 }
 
 //////////////////////////////////
+
+type Persona struct {
+	Height float64 `json:"height"` //estatura
+	Weight float64 `json:"weight"` //peso
+}
+
 var remotehost string
 
 //envio de datos
@@ -186,6 +192,10 @@ func enviarError() {
 	fmt.Fprintf(conn, "%.2f\n", rmse)
 }
 
+func estimar(per *Persona) {
+	(*per).Weight = prediction(float64((*per).Height))
+}
+
 //recepción de datos
 func manejador(con net.Conn) {
 	defer con.Close()
@@ -198,13 +208,14 @@ func manejador(con net.Conn) {
 	json.Unmarshal([]byte(jsonString), &persona)
 
 	//estimar peso con la altura ingresada
-	persona.Weight = prediction(float64(persona.Height))
+	estimar(&persona)
 
 	//mostrar y enviar
 	mostrar, _ := json.Marshal(persona)
 	fmt.Println("Llegó y se procesó correctamente", string(mostrar))
 	enviar(persona)
 }
+
 func setRango(con net.Conn) { //setea el rango deld dataset con el cual se va a entrenar
 	defer con.Close()
 	r := bufio.NewReader(con)
@@ -224,14 +235,11 @@ func ejecutarAlgoritmo() {
 
 	wg1.Add(2)
 
-	go calcularSXX()
-	go calcularSXY()
+	go calcularSSXX()
+	go calcularSSXY()
 
 	wg1.Wait()
-
-	b1 = sxy / sxx
-	b0 = my - b1*mx
-
+	calculoB1B2()
 	wg2.Add(1)
 
 	go calcularRMSE()
